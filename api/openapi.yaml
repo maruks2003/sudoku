@@ -1,0 +1,372 @@
+openapi: 3.0.3
+info:
+  title: Sudoku API
+  version: 0.1.0
+  description: |
+    Backend for a sudoku app. Players are anonymous: `POST /session` issues an
+    opaque token that the client stores and sends as `Authorization: Bearer <token>`.
+
+    Boards are 81 characters, row-major (index = row * 9 + col). '0' means empty.
+    Pencil notes are 81 integers, one per cell, each a 9-bit mask
+    (bit 0 = digit 1, bit 8 = digit 9).
+
+    When the last cell is filled correctly the game is finished and deleted:
+    that mutation returns `completed: true`, and later requests for the game get 404.
+
+servers:
+  - url: http://localhost:8080
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: session
+  - name: games
+  - name: cells
+
+paths:
+  /session:
+    post:
+      tags: [session]
+      operationId: createSession
+      summary: Create an anonymous player and obtain a token
+      security: []
+      responses:
+        "201":
+          description: Player created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /games:
+    get:
+      tags: [games]
+      operationId: listGames
+      summary: List the player's games in progress
+      responses:
+        "200":
+          description: Games in progress, most recently updated first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [games]
+      operationId: createGame
+      summary: Generate a new puzzle and start a game
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameRequest"
+      responses:
+        "201":
+          description: Game created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /games/{gameId}:
+    parameters:
+      - $ref: "#/components/parameters/GameId"
+    get:
+      tags: [games]
+      operationId: getGame
+      summary: Get the full state of a game
+      responses:
+        "200":
+          description: Current game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [games]
+      operationId: abandonGame
+      summary: Abandon (delete) a game
+      responses:
+        "204":
+          description: Game deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /games/{gameId}/cells/{row}/{col}/value:
+    parameters:
+      - $ref: "#/components/parameters/GameId"
+      - $ref: "#/components/parameters/Row"
+      - $ref: "#/components/parameters/Col"
+    put:
+      tags: [cells]
+      operationId: setCellValue
+      summary: Enter a number into a cell
+      description: |
+        Wrong-looking numbers are accepted and flagged via `conflicts` in the response.
+        Fails with 409 if the cell is a given. Setting a value clears the cell's notes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetValueRequest"
+      responses:
+        "200":
+          description: Updated game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [cells]
+      operationId: clearCellValue
+      summary: Clear the number in a cell
+      description: Idempotent. Fails with 409 if the cell is a given.
+      responses:
+        "200":
+          description: Updated game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /games/{gameId}/cells/{row}/{col}/notes/{number}:
+    parameters:
+      - $ref: "#/components/parameters/GameId"
+      - $ref: "#/components/parameters/Row"
+      - $ref: "#/components/parameters/Col"
+      - $ref: "#/components/parameters/Number"
+    put:
+      tags: [cells]
+      operationId: addCellNote
+      summary: Add a pencil mark to a cell
+      description: |
+        Idempotent. Fails with 409 if the cell is a given or already holds a number.
+      responses:
+        "200":
+          description: Updated game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [cells]
+      operationId: removeCellNote
+      summary: Remove a pencil mark from a cell
+      description: Idempotent. Fails with 409 if the cell is a given.
+      responses:
+        "200":
+          description: Updated game state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Opaque token from `POST /session`.
+
+  parameters:
+    GameId:
+      name: gameId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Row:
+      name: row
+      in: path
+      required: true
+      description: Row index, 0 (top) to 8 (bottom).
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 8
+    Col:
+      name: col
+      in: path
+      required: true
+      description: Column index, 0 (left) to 8 (right).
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 8
+    Number:
+      name: number
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9
+
+  schemas:
+    Session:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Opaque bearer token. Store it securely; it is not recoverable.
+
+    Difficulty:
+      type: string
+      enum: [easy, medium, hard, expert]
+
+    CreateGameRequest:
+      type: object
+      required: [difficulty]
+      properties:
+        difficulty:
+          $ref: "#/components/schemas/Difficulty"
+
+    SetValueRequest:
+      type: object
+      required: [number]
+      properties:
+        number:
+          type: integer
+          minimum: 1
+          maximum: 9
+
+    GameSummary:
+      type: object
+      required: [id, difficulty, startedAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        difficulty:
+          $ref: "#/components/schemas/Difficulty"
+        startedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Game:
+      allOf:
+        - $ref: "#/components/schemas/GameSummary"
+        - type: object
+          required: [givens, entries, notes, conflicts, completed]
+          properties:
+            givens:
+              type: string
+              pattern: "^[0-9]{81}$"
+              description: The puzzle as generated. '0' = empty. Never changes.
+            entries:
+              type: string
+              pattern: "^[0-9]{81}$"
+              description: Numbers the player has entered. '0' = empty.
+            notes:
+              type: array
+              minItems: 81
+              maxItems: 81
+              description: Per-cell pencil marks as 9-bit masks.
+              items:
+                type: integer
+                minimum: 0
+                maximum: 511
+            conflicts:
+              type: array
+              description: |
+                Indices (row * 9 + col) of entered cells that duplicate another
+                number in their row, column or box.
+              items:
+                type: integer
+                minimum: 0
+                maximum: 80
+            completed:
+              type: boolean
+              description: |
+                True when this request filled the last cell correctly. The game has
+                been deleted server-side by then.
+
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          example: cell_is_given
+        message:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Malformed or out-of-range input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Game not found (or not owned by this player)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Operation not allowed in the current state (e.g. cell is a given)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
