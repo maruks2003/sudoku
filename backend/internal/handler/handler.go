@@ -2,30 +2,31 @@ package handler
 
 import (
 	"context"
+
 	"github.com/maruks2003/sudoku/backend/internal/api"
+	"github.com/maruks2003/sudoku/backend/internal/auth"
+	"github.com/maruks2003/sudoku/backend/internal/store"
 )
 
-type Handler struct{}
+type Handler struct {
+	store store.Store
+}
 
-func New() *Handler {
-	return &Handler{}
+func New(gameStore store.Store) *Handler {
+	return &Handler{store: gameStore}
 }
 
 var _ api.StrictServerInterface = (*Handler)(nil)
 
-func (h *Handler) CreateSession(ctx context.Context, req api.CreateSessionRequestObject) (api.CreateSessionResponseObject, error) {
-	// Stub: return a fixed token so the FE can be wired up before auth exists.
-	return api.CreateSession201JSONResponse{Token: "dev-token"}, nil
-}
-
-func (h *Handler) ListGames(ctx context.Context, req api.ListGamesRequestObject) (api.ListGamesResponseObject, error) {
-	// Stub: Return an empty games list
-	return api.ListGames200JSONResponse([]api.GameSummary{stubGameSummary()}), nil
-}
-
-func (h *Handler) AbandonGame(ctx context.Context, req api.AbandonGameRequestObject) (api.AbandonGameResponseObject, error) {
-	// Stub
-	return api.AbandonGame204Response{}, nil
+func (handler *Handler) CreateSession(ctx context.Context, req api.CreateSessionRequestObject) (api.CreateSessionResponseObject, error) {
+	token, tokenHash, err := auth.NewToken()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := handler.store.CreatePlayer(ctx, tokenHash); err != nil {
+		return nil, err
+	}
+	return api.CreateSession201JSONResponse{Token: token}, nil
 }
 
 func (h *Handler) AddCellNote(ctx context.Context, req api.AddCellNoteRequestObject) (api.AddCellNoteResponseObject, error) {
@@ -46,14 +47,4 @@ func (h *Handler) SetCellValue(ctx context.Context, req api.SetCellValueRequestO
 func (h *Handler) ClearCellValue(ctx context.Context, req api.ClearCellValueRequestObject) (api.ClearCellValueResponseObject, error) {
 	// Stub
 	return api.ClearCellValue200JSONResponse(stubGame()), nil
-}
-
-func (h *Handler) CreateGame(ctx context.Context, req api.CreateGameRequestObject) (api.CreateGameResponseObject, error) {
-	// Stub
-	return api.CreateGame201JSONResponse(stubGame()), nil
-}
-
-func (h *Handler) GetGame(ctx context.Context, req api.GetGameRequestObject) (api.GetGameResponseObject, error) {
-	// Stub
-	return api.GetGame200JSONResponse(stubGame()), nil
 }

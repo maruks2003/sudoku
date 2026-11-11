@@ -1,7 +1,6 @@
 package game
 
 import (
-	"log"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -191,6 +190,7 @@ func removeClues(solution string, targetClues int) string {
 	return string(board)
 }
 
+// Generate the solution and given numbers for the puzzle
 func Generate(targetClues int) (solution string, given string) {
 	grid := newGrid()
 	solved, _ := solve(grid)

@@ -6,8 +6,10 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/gin-gonic/gin"
 	"github.com/maruks2003/sudoku/backend/internal/api"
+	"github.com/maruks2003/sudoku/backend/internal/auth"
 	"github.com/maruks2003/sudoku/backend/internal/docs"
 	"github.com/maruks2003/sudoku/backend/internal/handler"
+	"github.com/maruks2003/sudoku/backend/internal/store"
 	ginmw "github.com/oapi-codegen/gin-middleware"
 )
 
@@ -25,15 +27,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	validated := router.Group("")
+	gameStore := store.NewMemory()
 
-	validated.Use(ginmw.OapiRequestValidatorWithOptions(spec, &ginmw.Options{
+	validated := router.Group("")
+	validated.Use(auth.Middleware(gameStore), ginmw.OapiRequestValidatorWithOptions(spec, &ginmw.Options{
 		Options: openapi3filter.Options{
 			AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, // real auth later
 		},
 	}))
 
-	strictHandler := api.NewStrictHandler(handler.New(), nil)
+	strictHandler := api.NewStrictHandler(handler.New(gameStore), nil)
 	api.RegisterHandlers(validated, strictHandler)
 
 	log.Fatal(router.Run(":8080"))

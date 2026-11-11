@@ -2,16 +2,30 @@ import { client } from "./client";
 import type { components } from "./schema";
 
 export type Game = components["schemas"]["Game"];
+export type GameSummary = components["schemas"]["GameSummary"];
+export type Difficulty = components["schemas"]["Difficulty"];
 
 function cellPosition(index: number) {
     return { row: Math.floor(index / 9), col: index % 9 };
 }
 
-function unwrap(result: { data?: Game; error?: unknown }): Game {
+function unwrap<Data>(result: { data?: Data; error?: unknown }): Data {
     if (result.data === undefined) {
         throw new Error(`request failed: ${JSON.stringify(result.error)}`);
     }
     return result.data;
+}
+
+export async function listGames(): Promise<GameSummary[]> {
+    return unwrap(
+        await client.GET("/games"),
+    );
+}
+
+export async function createGame(difficulty: Difficulty): Promise<Game> {
+    return unwrap(
+        await client.POST("/games", { body: { difficulty } }),
+    );
 }
 
 export async function getGame(gameId: string): Promise<Game> {

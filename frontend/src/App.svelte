@@ -5,14 +5,13 @@
     import {
         addCellNote,
         clearCellValue,
+        createGame,
         getGame,
+        listGames,
         removeCellNote,
         setCellValue,
         type Game,
     } from "./lib/api/game";
-
-    // The ID the backend's stub handler uses; replaced once there is a game list.
-    const gameId = "11111111-1111-4111-8111-111111111111";
 
     let game = $state<Game | null>(null);
     let noteMode = $state(false);
@@ -35,12 +34,21 @@
     onMount(() => {
         run(async () => {
             await ensureSession();
-            return getGame(gameId);
+            let games = await listGames();
+            let id = games.at(0)?.id;
+            if (games.length > 1 && id !== undefined) {
+                return getGame(id);
+            }
+            return createGame("easy");
         });
     });
 
     function handleDigit(index: number, digit: number) {
         const writingNote = noteMode; // the mode at the moment of the keypress
+        if (game == null) {
+            return;
+        }
+        const gameId = game.id;
         run(() => {
             if (!writingNote) {
                 return setCellValue(gameId, index, digit);
@@ -54,6 +62,10 @@
     }
 
     function handleClear(index: number) {
+        if (game == null) {
+            return;
+        }
+        const gameId = game.id;
         run(() => clearCellValue(gameId, index));
     }
 
